@@ -23,22 +23,24 @@ class Sim23LC1024:
             self.input_shift_register = []
             self.output_shift_register = []
             return cocotb.binary.BinaryValue("z")
-        self.input_shift_register.append(si)
+        self.input_shift_register.append(si.value)
         if self.mode == "instruction":
             assert len(self.input_shift_register) <= 32
             if len(self.input_shift_register) == 32:
                 instruction = self.input_shift_register[:8]
                 self.address = sum(
-                    2**(23 - i) * bit
+                    2**(23 - i) * bit.value
                     for i, bit in enumerate(self.input_shift_register[8:32])
                 )
                 # The spec says that the first seven bits of the address are ignored.
                 # But for now, I'd like to enforce that those bits are all zero.
                 #self.address %= self.SIZE
                 if instruction == [0, 0, 0, 0, 0, 0, 1, 1]:
+                    print("SRAM: read at address %x" % self.address)
                     self.mode = "read"
                     self.output_shift_register = self.contents[self.address][:]
                 elif instruction == [0, 0, 0, 0, 0, 0, 1, 0]:
+                    print("SRAM: write at address %x" % self.address)
                     self.mode = "write"
                 else:
                     # I don't implement the other six instructions for now.
