@@ -11,9 +11,9 @@ module main (
 );
   reg sram_cs;
   reg sram_si;
-  reg sram_so;
-  assign sram_cs = uo_out[0];
-  assign sram_si = uo_out[1];
+  wire sram_so;
+  assign uo_out[0] = sram_cs;
+  assign uo_out[1] = sram_si;
   assign sram_so = ui_in[0];
 
   /// Simple memory controller
@@ -27,7 +27,7 @@ module main (
         // Do something interesting here?
       end
 
-      //sram_cs <= 1;
+      sram_cs <= 1;
     end
   end
 endmodule
