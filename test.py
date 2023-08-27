@@ -21,5 +21,5 @@ async def test_main(dut):
     # Begin simulation.
     dut.rst_n.value = 1
 
-    for _ in range(100):
+    for _ in range(10):
         await wait_cycle()

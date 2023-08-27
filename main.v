@@ -16,7 +16,7 @@ module main (
   assign uo_out[1] = sram_si;
   assign sram_so = ui_in[0];
 
-  /// Simple memory controller
+  // Simple memory controller
   reg [23:0] address;
   always @(posedge clk) begin
     if (ena) begin
