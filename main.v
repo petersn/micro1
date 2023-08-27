@@ -84,7 +84,7 @@ module main (
         error <= 0;
         instruction_pointer <= 16'h100;
         mem_request <= 0;
-        ifetch_required <= 0;
+        ifetch_required <= 1;
         read_instruction <= 0;
       end else if (!error) begin
         // ========== Main logic begins here ==========
