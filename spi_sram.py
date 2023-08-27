@@ -1,3 +1,4 @@
+import cocotb
 
 class Sim23LC1024:
     SIZE = 0x20000
@@ -12,16 +13,16 @@ class Sim23LC1024:
     def clock(self, cs, si):
         if not cs.value.is_resolvable:
             self.mode = "invalid"
-            return
+            return cocotb.binary.BinaryValue("z")
         if cs.value == 1:
             self.input_shift_register = []
             self.output_shift_register = []
             self.mode = "instruction"
-            return
+            return cocotb.binary.BinaryValue("z")
         if self.mode == "invalid":
             self.input_shift_register = []
             self.output_shift_register = []
-            return
+            return cocotb.binary.BinaryValue("z")
         self.input_shift_register.append(si)
         if self.mode == "instruction":
             assert len(self.input_shift_register) <= 32
@@ -57,6 +58,8 @@ class Sim23LC1024:
                 self.input_shift_register = []
         if self.output_shift_register:
             return self.output_shift_register.pop(0)
+        else:
+            return cocotb.binary.BinaryValue("z")
 
 
 if __name__ == "__main__":

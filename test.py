@@ -11,9 +11,8 @@ async def test_main(dut):
 
     async def wait_cycle():
         sram_output = mem.clock(cs=dut.uo_out[0], si=dut.uo_out[1])
-        print(f"cs: {dut.uo_out[0].value}, si: {dut.uo_out[1].value}, so: {sram_output.value}")
-        if sram_output is not None:
-            dut.ui_in[0] = sram_output
+        print(f"cs: {dut.uo_out[0].value}, si: {dut.uo_out[1].value}, so: {sram_output}")
+        dut.ui_in[0].value = sram_output
         await ClockCycles(dut.clk, 1)
 
     # Assert reset.
