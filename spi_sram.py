@@ -10,11 +10,17 @@ class Sim23LC1024:
         self.address = 0
 
     def clock(self, cs, si):
-        #print(dir(cs), cs.value, type(cs.value), dir(cs.value))
-        if cs == 1:
+        if not cs.value.is_resolvable:
+            self.mode = "invalid"
+            return
+        if cs.value == 1:
             self.input_shift_register = []
             self.output_shift_register = []
             self.mode = "instruction"
+            return
+        if self.mode == "invalid":
+            self.input_shift_register = []
+            self.output_shift_register = []
             return
         self.input_shift_register.append(si)
         if self.mode == "instruction":
