@@ -12,9 +12,9 @@ async def test_main(dut):
     dut.ena.value = 1
 
     async def wait_cycle():
-        sram_output = mem.clock(cs=dut.uo_out[0], si=dut.uo_out[1])
+        sram_output = mem.clock(cs=dut.uio_out[4], si=dut.uio_out[5])
         #print(f"cs: {dut.uo_out[0].value}, si: {dut.uo_out[1].value}, so: {sram_output}")
-        dut.ui_in[0].value = sram_output
+        dut.uio_in[0].value = sram_output
         await ClockCycles(dut.clk, 1, rising=False)
 
     # Assert reset.

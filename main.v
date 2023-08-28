@@ -1,6 +1,6 @@
 `define WORD_SIZE 16
 `define REGISTER_COUNT 16
-`define CACHE_SIZE 8
+`define CACHE_SIZE 16
 `define CACHE_LINE_SIZE_BITS 128
 `define ADDRESS_LEN 17
 `define ADDRESS_IGNORED_BITS 7
@@ -20,9 +20,12 @@ module main (
   wire sram_cs;
   wire sram_si;
   wire sram_so;
-  assign uo_out[0] = sram_cs;
-  assign uo_out[1] = sram_si;
-  assign sram_so = ui_in[0];
+  assign sram_so = uio_in[0];
+  assign uio_out[4] = sram_cs;
+  assign uio_out[5] = sram_si;
+  assign uio_oe[0] = 0;
+  assign uio_oe[4] = 1;
+  assign uio_oe[5] = 1;
 
   // CPU state.
   reg error;
@@ -73,10 +76,6 @@ module main (
     .sram_si(sram_si),
     .sram_so(sram_so)
   );
-
-  //// Cache state machine.
-  // reg [`CACHE_LINE_SIZE_BITS - 1 : 0] cache[`CACHE_SIZE];
-  // reg [`CACHE_TAG_LEN - 1 : 0] cache_tags[`CACHE_SIZE];
 
   always @(posedge clk) begin
     if (ena) begin
@@ -209,7 +208,13 @@ module memory_controller (
   output reg                         sram_si,
   input  wire                        sram_so
 );
-  reg [6 : 0] counter;
+  reg [`CACHE_LINE_SIZE_BITS - 1 : 0] cache[`CACHE_SIZE];
+  reg [`CACHE_TAG_LEN - 1 : 0] cache_tags[`CACHE_SIZE];
+
+  // Cache lines are 16 bytes long. We are 2-way associative.
+  wire [3:0] way1 = mem_address[7:4];
+
+  reg [6:0] counter;
 
   always @(posedge clk) begin
     if (ena) begin
