@@ -345,9 +345,14 @@ module processor(
   output reg [`SRAM_ADDRESS_SIZE - 1 : 0]  mem_address,
   output reg [`MEMORY_WORD_SIZE - 1 : 0]   mem_write_value,
   output reg                               mem_write_enable,
-  input  wire  [`MEMORY_WORD_SIZE - 1 : 0] mem_read_value,
+  input  wire [`MEMORY_WORD_SIZE - 1 : 0]  mem_read_value,
   output reg                               mem_request,
-  input  wire                              mem_request_complete
+  input  wire                              mem_request_complete,
+
+  // Processor GPIO.
+  output reg [7:0] gpio_out,
+  input  wire [7:0] gpio_in,
+  output reg [7:0] gpio_oe
 );
   // CPU state.
   reg error;
@@ -372,7 +377,7 @@ module processor(
   wire [7:0] imm8;
   assign imm8 = fetched_instruction[15:8];
   wire [15:0] imm8SignExtended;
-  assign imm12SignExtended = {{8{imm8[7]}}, imm8};
+  assign imm8SignExtended = {{8{imm8[7]}}, imm8};
   wire [11:0] imm12;
   assign imm12 = fetched_instruction[15:4];
   wire [15:0] imm12SignExtended;
@@ -433,8 +438,71 @@ module processor(
               ifetch_required <= 1;
             end
             4'b0010: begin
-              // $display("ADD r%d = r%d + r%d", regDest, regA, regB);
-              register_file[regDest] <= register_file[regA] + register_file[regB];
+              // Perform a binary operation with the destination fixed.
+              case (regDest)
+                4'b0000: begin
+                  // $display("ADD r%d = r%d + r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] + register_file[regB];
+                end
+                4'b0001: begin
+                  // $display("SUB r%d = r%d - r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] - register_file[regB];
+                end
+                4'b0010: begin
+                  // $display("AND r%d = r%d & r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] & register_file[regB];
+                end
+                4'b0011: begin
+                  // $display("OR r%d = r%d | r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] | register_file[regB];
+                end
+                4'b0100: begin
+                  // $display("XOR r%d = r%d ^ r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] ^ register_file[regB];
+                end
+                4'b0101: begin
+                  // $display("SHL r%d = r%d << r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] << register_file[regB];
+                end
+                4'b0110: begin
+                  // $display("SHR r%d = r%d >> r%d", regDest, regA, regB);
+                  register_file[0] <= register_file[regA] >> register_file[regB];
+                end
+                4'b0111: begin
+                  // $display("SHRA r%d = r%d >>> r%d", regDest, regA, regB);
+                  register_file[0] <= $signed(register_file[regA]) >>> register_file[regB];
+                end
+                // Comparisons.
+                4'b1000: begin
+                  // $display("CMP r%d = r%d == r%d", regDest, regA, regB);
+                  register_file[0] <= (register_file[regA] == register_file[regB]) ? 1 : 0;
+                end
+                4'b1001: begin
+                  // Signed comparison.
+                  // $display("SCMP r%d = r%d < r%d", regDest, regA, regB);
+                  register_file[0] <= ($signed(register_file[regA]) < $signed(register_file[regB])) ? 1 : 0;
+                end
+                4'b1010: begin
+                  // $display("UCMP r%d = r%d < r%d", regDest, regA, regB);
+                  register_file[0] <= (register_file[regA] < register_file[regB]) ? 1 : 0;
+                end
+                4'b1011: begin
+                  // Multiply.
+                  register_file[0] <= register_file[regA] * register_file[regB];
+                end
+                4'b1100: begin
+                  // Signed multiply.
+                  register_file[0] <= $signed(register_file[regA]) * $signed(register_file[regB]);
+                end
+                // 4'b1101: begin
+                //   // Divide.
+                //   register_file[0] <= register_file[regA] / register_file[regB];
+                // end
+                // 4'b1110: begin
+                //   // Signed divide.
+                //   register_file[0] <= $signed(register_file[regA]) / $signed(register_file[regB]);
+                // end
+              endcase
               ifetch_required <= 1;
             end
             4'b0011: begin
@@ -449,8 +517,8 @@ module processor(
             end
             4'b0101: begin
               // $display("JNZ %d, r%d", $signed(imm8SignExtended), regDest);
-              if (register_file[regDest] != 0) begin
-                instruction_pointer <= instruction_pointer + imm8SignExtended;
+              if (register_file[0] != 0) begin
+                instruction_pointer <= instruction_pointer + imm12SignExtended;
               end
               ifetch_required <= 1;
             end
@@ -460,6 +528,16 @@ module processor(
               ifetch_required <= 1;
             end
             4'b0111: begin
+              // $display("INDIRECT JMP r%d", regDest);
+              instruction_pointer <= register_file[regDest] + imm8SignExtended;
+              ifetch_required <= 1;
+            end
+            4'b1000: begin
+              // $display("GET IP r%d", regDest);
+              register_file[regDest] <= instruction_pointer;
+              ifetch_required <= 1;
+            end
+            4'b1001: begin
               // $display("LOAD r%d = [r%d + %d]", regDest, regA, $signed(imm4SignExtended));
               mem_address <= register_file[regA] + imm4SignExtended;
               mem_request <= 1;
@@ -471,7 +549,7 @@ module processor(
                 ifetch_required <= 1;
               end
             end
-            4'b1000: begin
+            4'b1010: begin
               // $display("STORE [r%d + %d] = r%d", regA, $signed(imm4SignExtended), regB);
               mem_address <= register_file[regA] + imm4SignExtended;
               mem_write_value <= register_file[regB];
@@ -482,6 +560,28 @@ module processor(
                 mem_request <= 0;
                 ifetch_required <= 1;
               end
+            end
+            4'b1011: begin
+              // $display("GPIO OPERATION");
+              case (regB)
+                4'b0000: begin
+                  // $display("GPIO OUT r%d = r%d", regDest, regA);
+                  gpio_out[regDest] <= register_file[regA];
+                end
+                4'b0001: begin
+                  // $display("GPIO IN r%d = r%d", regDest, regA);
+                  register_file[regDest] <= gpio_in[regA];
+                end
+                4'b0010: begin
+                  // $display("GPIO OE r%d = r%d", regDest, regA);
+                  gpio_oe[regDest] <= register_file[regA];
+                end
+                4'b0011: begin
+                  // $display("GPIO OE r%d = r%d", regDest, regA);
+                  register_file[regDest] <= gpio_oe[regA];
+                end
+              endcase
+              ifetch_required <= 1;
             end
             default: begin
               // $display("BADOP");
@@ -510,6 +610,10 @@ module micro1 (
   wire vga_b = uo_out[2];
   wire vga_hs = uo_out[3];
   wire vga_vs = uo_out[4];
+  wire sram_cs_n = uo_out[5];
+  wire sram_sck = uo_out[6];
+  wire sram_si = uo_out[7];
+  wire sram_so = ui_in[0];
 
   reg [`SRAM_ADDRESS_SIZE - 1 : 0] video_mem_address;
   reg [`MEMORY_WORD_SIZE - 1 : 0]  video_mem_write_value;
@@ -553,8 +657,13 @@ module micro1 (
   );
 
   wire error_out;
-  //assign led = !error_out;
-  assign led = 1;
+  assign led = !error_out;
+
+  reg [7:0] processor_gpio_out;
+  reg [7:0] processor_gpio_oe;
+
+  assign uio_out = processor_gpio_out;
+  assign uio_oe = processor_gpio_oe;
 
   // Instantiate the main processor.
   processor processor_inst(
@@ -569,19 +678,23 @@ module micro1 (
     .mem_write_enable(cache_mem_write_enable),
     .mem_read_value(cache_mem_read_value),
     .mem_request(cache_mem_request),
-    .mem_request_complete(cache_mem_request_complete)
+    .mem_request_complete(cache_mem_request_complete),
+
+    .gpio_out(processor_gpio_out),
+    .gpio_in(uio_in),
+    .gpio_oe(processor_gpio_oe)
   );
 
-  // Set output directions.
-  assign uio_oe[0] = 1;
-  assign uio_oe[1] = 0;
-  assign uio_oe[2] = 1; // We're pulling up, so output.
-  assign uio_oe[3] = 1;
-  assign uio_oe[4] = 1;
-  assign uio_oe[5] = 1; // We're pulling up, so output.
-  // Assign pull-up values.
-  assign uio_out[2] = 1;
-  assign uio_out[5] = 1;
+  // // Set output directions.
+  // assign uio_oe[0] = 1;
+  // assign uio_oe[1] = 0;
+  // assign uio_oe[2] = 1; // We're pulling up, so output.
+  // assign uio_oe[3] = 1;
+  // assign uio_oe[4] = 1;
+  // assign uio_oe[5] = 1; // We're pulling up, so output.
+  // // Assign pull-up values.
+  // assign uio_out[2] = 1;
+  // assign uio_out[5] = 1;
 
   reg [3:0] mem_controller_clock_divider = 0;
   always @(posedge clk_100mhz) begin
@@ -589,7 +702,7 @@ module micro1 (
   end
 
   // Assign the serial clock.
-  assign uio_out[4] = !(mem_controller_clock_divider[3] ^ mem_controller_clock_divider[2]);
+  assign sram_sck = !(mem_controller_clock_divider[3] ^ mem_controller_clock_divider[2]);
 
   memory_controller memory_controller_inst(
     .ena(ena),
@@ -610,9 +723,9 @@ module micro1 (
     .mem_request1(cpu_mem_request),
     .mem_request_complete1(cpu_mem_request_complete),
 
-    .sram_cs_n(uio_out[0]),
-    .sram_si(uio_out[3]),
-    .sram_so(uio_in[1])
+    .sram_cs_n(sram_cs_n),
+    .sram_si(sram_si),
+    .sram_so(sram_so)
   );
 
   reg [23:0] ctr = 0;

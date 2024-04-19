@@ -7,7 +7,7 @@ module top (
   output wire [3:0] ledR,
   output wire [3:0] ledG,
   output wire [3:0] ledB,
-  input wire clk_100mhz
+  input wire clk_100mhz,
 );
   wire [7:0] uio_in;
   wire [7:0] uio_out;
@@ -24,7 +24,7 @@ module top (
     // rst_n <= (ctr >= 1000000);
   end
 
-  assign ledR = 4'b1111;
+  assign ledR[2:0] = 3'b111;
   assign ledG = 4'b1111;
   assign ledB = {3'b111, rst_n};
 
@@ -45,6 +45,7 @@ module top (
     .uio_oe(uio_oe),
     .ena(1),
     .clk_100mhz(clk_100mhz),
-    .rst_n(rst_n)
+    .rst_n(rst_n),
+    .led(ledR[3])
   );
 endmodule
