@@ -35,11 +35,12 @@ module memory_controller (
             // Then the eighth bit is 0 if we're writing, 1 if we're reading.
             sram_si <= !mem_write_enable;
           end else if (counter < 8 + `SRAM_ADDRESS_IGNORED_BITS) begin
-            // sram_si <= 0;
-            sram_si <= 1;
+            sram_si <= 0;
+            // sram_si <= 1;
           end else if (counter < 32) begin
             // Then the next 17 bits are the address.
-            sram_si <= mem_address[`SRAM_ADDRESS_SIZE - (counter - 8 - `SRAM_ADDRESS_IGNORED_BITS) - 1];
+            //sram_si <= mem_address[`SRAM_ADDRESS_SIZE - (counter - 8 - `SRAM_ADDRESS_IGNORED_BITS) - 1];
+            sram_si <= mem_address[counter - 8 - `SRAM_ADDRESS_IGNORED_BITS];
           end else if (counter < 32 + `MEMORY_WORD_SIZE) begin
             if (mem_write_enable) begin
               // Finally we send the bits to write, if relevant.
@@ -112,9 +113,17 @@ module micro1 (
   assign uio_out[2] = 1;
   assign uio_out[5] = 1;
 
+  reg [3:0] mem_controller_clock_divider = 0;
+  always @(posedge clk_100mhz) begin
+    mem_controller_clock_divider <= mem_controller_clock_divider + 1;
+  end
+
+  // Assign the serial clock.
+  assign uio_out[4] = !(mem_controller_clock_divider[3] ^ mem_controller_clock_divider[2]);
+
   memory_controller memory_controller_inst(
     .ena(ena),
-    .clk(clk_100mhz),
+    .clk(mem_controller_clock_divider[3]),
     .rst_n(rst_n),
     .mem_address(mem_address),
     .mem_write_value(mem_write_value),
@@ -137,27 +146,48 @@ module micro1 (
   reg [5:0] line_ctr = 0;
   reg [4:0] line_ptr = 0;
 
+  reg mem_fill = 0;
+
   wire video_en = (scanline >= 35) && (scanline < 515) && (ctr < 2700);
 
+  // We now figure out which character we're at.
+  wire [9:0] offset_scanline = scanline - 35;
+  wire [4:0] current_row = offset_scanline[8:4];
+  wire [3:0] pixel_y = offset_scanline[3:0];
+  // Each pixel is 4 cycles long.
+  wire [6:0] current_col = ctr[12:6];
+  wire [3:0] pixel_x = ctr[5:2];
+
+  wire [15:0] current_char_pair = current_col >= 40 ? 0 : (line_flip ? line_buffer2[current_col >> 1] : line_buffer1[current_col >> 1]);
+  wire [7:0] current_char = current_col[0] ? current_char_pair[7:0] : current_char_pair[15:8];
+
+  // We now interpret the character as a little 2x4 grid.
+  wire color = current_char[{pixel_y[3], pixel_y[2], pixel_x[3]}];
+  //wire color = (current_col >= 39) | (current_row >= 29);
+
   // assign vga_r = (lfsr[0] ^ lfsr[7]) & video_en;
-  assign vga_r = 0;
+  assign vga_r = color & video_en;
   // assign vga_g = (lfsr[1] ^ lfsr[12]) & video_en;
   // assign vga_b = (lfsr[2] ^ lfsr[5]) & video_en;
   assign vga_g = mem_request & video_en;
-  assign vga_b = mem_request_complete & video_en;
+  // assign vga_g = 0 & video_en;
+  //assign vga_b = (mem_request_complete | (pixel_x == 0) | (pixel_y == 0)) & video_en;
+  assign vga_b = ((pixel_x == 0) | (pixel_y == 0) & (current_col < 40)) & video_en;
 
   assign vga_vs = scanline >= 2;
   assign vga_hs = (ctr < 2700) || (ctr > 3000);
 
   always @(posedge clk_100mhz) begin
     if (ena) begin
-      if (rst_n == 0) begin
+      if (!rst_n) begin
         ctr <= 0;
         scanline <= 0;
         line_flip <= 0;
         line_ctr <= 0;
         line_ptr <= 0;
         lfsr <= 1;
+        mem_fill <= 1;
+        mem_address <= 0;
       end else begin
         lfsr <= {lfsr[30:0], lfsr[31] ^ lfsr[21] ^ lfsr[1] ^ lfsr[0]};
         ctr <= ctr + 1;
@@ -165,27 +195,48 @@ module micro1 (
         if (ctr >= 3200) begin
           ctr <= 0;
           scanline <= scanline < 524 ? scanline + 1 : 0;
-          if (((scanline - 35) & 16'h000f) == 0) begin
+          if (offset_scanline[3:0] == 4'b1111) begin
             line_flip <= !line_flip;
-            line_ctr <= (scanline - 35) >> 4;
+            line_ctr <= current_row;
             line_ptr <= 0;
           end
         end
 
-        if ((line_ptr < 20) && !mem_request) begin
-          mem_address <= 40 * line_ctr + 2 * line_ptr;
-          mem_write_enable <= 0;
-          mem_request <= 1;
-          line_ptr <= line_ptr + 1;
-        end
-
-        if (mem_request_complete) begin
-          mem_request <= 0;
-          if (line_flip) begin
-            line_buffer1[line_ptr] <= mem_read_value;
-          end else begin
-            line_buffer2[line_ptr] <= mem_read_value;
+        if (mem_fill) begin
+          // Begin filling memory with characters.
+          if (!mem_request) begin
+            mem_address <= mem_address + 1;
+            mem_write_value <= lfsr[15:0];
+            mem_write_enable <= 1;
+            mem_request <= 1;
           end
+          if (mem_request_complete) begin
+            mem_request <= 0;
+            if (mem_address >= 1200) begin
+              mem_fill <= 0;
+            end
+          end
+        end else begin
+          // Otherwise, fetch the next line of characters.
+          if ((line_ptr < 20) && (!mem_request) && (!mem_request_complete)) begin
+            mem_address <= 40 * line_ctr + 2 * line_ptr;
+            mem_write_enable <= lfsr[0] & lfsr[1] & lfsr[2] & lfsr[3] & lfsr[4]; // FIXME: Do a random mixture of reads and writes.
+            mem_write_value <= lfsr[15:0];
+            //mem_write_value <= mem_address;
+            // mem_write_value <= 8'hc5;
+            // mem_write_enable <= 0;
+            mem_request <= 1;
+            line_ptr <= line_ptr + 1;
+          end
+          if (mem_request_complete) begin
+            mem_request <= 0;
+            if (line_flip) begin
+              line_buffer1[line_ptr - 1] <= mem_read_value;
+            end else begin
+              line_buffer2[line_ptr - 1] <= mem_read_value;
+            end
+          end
+
         end
       end
     end
