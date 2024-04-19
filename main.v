@@ -318,7 +318,7 @@ module font_rom(
     (off_char == 93) ? 256'b0000000000000000000000000000000000000000000110000000000000111000000000000110000000000000011000000000000001100000000000000110000000000001110000000000000111100000000000000110000000000000011000000000000001100000000000000110000000000000001110000000000000011000 :
     (off_char == 94) ? 256'b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011100000000000011111000000000011001100110000001100110011000000000001111000000000000011100 :
     (off_char == 95) ? 256'b0000000000000000000000000000000000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110 : 0;
-  assign color = turbo_block[pixel_addr];
+  assign color = ((char >= 32) && (char < 96)) ? turbo_block[pixel_addr] : pixel_x ^ pixel_y;
   //assign color = ((char >= 32) && (char < 96)) ? font[char - 32][pixel_y * 16 + pixel_x] : pixel_x ^ pixel_y;
 endmodule
 
@@ -335,9 +335,9 @@ endmodule
 `define REGISTER_COUNT 16
 
 module processor(
-  input  wire       ena,        // high when enabled
-  input  wire       clk_100mhz, // clock
-  input  wire       rst_n,       // reset negated (low to reset)
+  input  wire       ena,    // high when enabled
+  input  wire       clk,    // clock
+  input  wire       rst_n,  // reset negated (low to reset)
 
   output wire error_out, // high when an error has occurred
 
@@ -554,12 +554,12 @@ module micro1 (
 
   wire error_out;
   //assign led = !error_out;
-  assign led = 0;
+  assign led = 1;
 
   // Instantiate the main processor.
   processor processor_inst(
     .ena(ena),
-    .clk_100mhz(clk_100mhz),
+    .clk(clk_100mhz),
     .rst_n(rst_n),
 
     .error_out(error_out),
