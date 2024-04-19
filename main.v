@@ -87,6 +87,14 @@ module memory_controller (
             in_flight <= 0;
           end
         end else begin
+          // Clear completion flags, if acknowledged.
+          if (!mem_request0) begin
+            mem_request_complete0 <= 0;
+          end
+          if (!mem_request1) begin
+            mem_request_complete1 <= 0;
+          end
+
           if (mem_request0 && !mem_request_complete0) begin
             counter <= 0;
             in_flight <= 1;
@@ -97,14 +105,6 @@ module memory_controller (
             which_port <= 1;
           end
         end
-
-        // Clear completion flags, if acknowledged.
-        if (!mem_request0) begin
-          mem_request_complete0 <= 0;
-        end
-        if (!mem_request1) begin
-          mem_request_complete1 <= 0;
-        end
       end
     end else begin
       sram_cs_n <= 1;
@@ -112,103 +112,103 @@ module memory_controller (
   end
 endmodule
 
-`define CACHE_SIZE 32
+// `define CACHE_SIZE 32
 
-// Because memory is so slow, we need a small cache in order to stand a chance.
-module cache (
-  input wire ena,
-  input wire clk,
+// // Because memory is so slow, we need a small cache in order to stand a chance.
+// module cache (
+//   input wire ena,
+//   input wire clk,
 
-  // Actual memory port.
-  output reg [`SRAM_ADDRESS_SIZE - 1 : 0]  mem_address,
-  output reg [`MEMORY_WORD_SIZE - 1 : 0]   mem_write_value,
-  output reg                               mem_write_enable,
-  input  wire  [`MEMORY_WORD_SIZE - 1 : 0] mem_read_value,
-  output reg                               mem_request,
-  input  wire                              mem_request_complete,
+//   // Actual memory port.
+//   output reg [`SRAM_ADDRESS_SIZE - 1 : 0]  mem_address,
+//   output reg [`MEMORY_WORD_SIZE - 1 : 0]   mem_write_value,
+//   output reg                               mem_write_enable,
+//   input  wire  [`MEMORY_WORD_SIZE - 1 : 0] mem_read_value,
+//   output reg                               mem_request,
+//   input  wire                              mem_request_complete,
 
-  // Cache port.
-  input wire [`SRAM_ADDRESS_SIZE - 1 : 0] cache_address,
-  input wire [`MEMORY_WORD_SIZE - 1 : 0]  cache_write_value,
-  input wire                              cache_write_enable,
-  output wire [`MEMORY_WORD_SIZE - 1 : 0] cache_read_value,
-  input wire                              cache_request,
-  output wire                             cache_request_complete
-);
-  reg [15:0] cache_values [0:`CACHE_SIZE-1];
-  reg [15:0] cache_addresses [0:`CACHE_SIZE-1];
+//   // Cache port.
+//   input wire [`SRAM_ADDRESS_SIZE - 1 : 0] cache_address,
+//   input wire [`MEMORY_WORD_SIZE - 1 : 0]  cache_write_value,
+//   input wire                              cache_write_enable,
+//   output wire [`MEMORY_WORD_SIZE - 1 : 0] cache_read_value,
+//   input wire                              cache_request,
+//   output wire                             cache_request_complete
+// );
+//   reg [15:0] cache_values [0:`CACHE_SIZE-1];
+//   reg [15:0] cache_addresses [0:`CACHE_SIZE-1];
 
-  wire [5:0] hit_cache_line = (
-    cache_addresses[0] == cache_address ? 0 : cache_addresses[1] == cache_address ? 1 : cache_addresses[2] == cache_address ? 2 : cache_addresses[3] == cache_address ? 3 :
-    cache_addresses[4] == cache_address ? 4 : cache_addresses[5] == cache_address ? 5 : cache_addresses[6] == cache_address ? 6 : cache_addresses[7] == cache_address ? 7 :
-    cache_addresses[8] == cache_address ? 8 : cache_addresses[9] == cache_address ? 9 : cache_addresses[10] == cache_address ? 10 : cache_addresses[11] == cache_address ? 11 :
-    cache_addresses[12] == cache_address ? 12 : cache_addresses[13] == cache_address ? 13 : cache_addresses[14] == cache_address ? 14 : cache_addresses[15] == cache_address ? 15 :
-    cache_addresses[16] == cache_address ? 16 : cache_addresses[17] == cache_address ? 17 : cache_addresses[18] == cache_address ? 18 : cache_addresses[19] == cache_address ? 19 :
-    cache_addresses[20] == cache_address ? 20 : cache_addresses[21] == cache_address ? 21 : cache_addresses[22] == cache_address ? 22 : cache_addresses[23] == cache_address ? 23 :
-    cache_addresses[24] == cache_address ? 24 : cache_addresses[25] == cache_address ? 25 : cache_addresses[26] == cache_address ? 26 : cache_addresses[27] == cache_address ? 27 :
-    cache_addresses[28] == cache_address ? 28 : cache_addresses[29] == cache_address ? 29 : cache_addresses[30] == cache_address ? 30 : cache_addresses[31] == cache_address ? 31 : 32
-  );
-  // The first 4096 bytes of memory are never cached.
-  wire cache_miss = hit_cache_line[5] || (cache_address < 16'h1000);
+//   wire [5:0] hit_cache_line = (
+//     cache_addresses[0] == cache_address ? 0 : cache_addresses[1] == cache_address ? 1 : cache_addresses[2] == cache_address ? 2 : cache_addresses[3] == cache_address ? 3 :
+//     cache_addresses[4] == cache_address ? 4 : cache_addresses[5] == cache_address ? 5 : cache_addresses[6] == cache_address ? 6 : cache_addresses[7] == cache_address ? 7 :
+//     cache_addresses[8] == cache_address ? 8 : cache_addresses[9] == cache_address ? 9 : cache_addresses[10] == cache_address ? 10 : cache_addresses[11] == cache_address ? 11 :
+//     cache_addresses[12] == cache_address ? 12 : cache_addresses[13] == cache_address ? 13 : cache_addresses[14] == cache_address ? 14 : cache_addresses[15] == cache_address ? 15 :
+//     cache_addresses[16] == cache_address ? 16 : cache_addresses[17] == cache_address ? 17 : cache_addresses[18] == cache_address ? 18 : cache_addresses[19] == cache_address ? 19 :
+//     cache_addresses[20] == cache_address ? 20 : cache_addresses[21] == cache_address ? 21 : cache_addresses[22] == cache_address ? 22 : cache_addresses[23] == cache_address ? 23 :
+//     cache_addresses[24] == cache_address ? 24 : cache_addresses[25] == cache_address ? 25 : cache_addresses[26] == cache_address ? 26 : cache_addresses[27] == cache_address ? 27 :
+//     cache_addresses[28] == cache_address ? 28 : cache_addresses[29] == cache_address ? 29 : cache_addresses[30] == cache_address ? 30 : cache_addresses[31] == cache_address ? 31 : 32
+//   );
+//   // The first 4096 bytes of memory are never cached.
+//   wire cache_miss = hit_cache_line[5] || (cache_address < 16'h1000);
 
-  reg [4:0] eviction_counter = 0;
+//   reg [4:0] eviction_counter = 0;
 
-  always @(posedge clk) begin
-    if (ena) begin
-      // Check for an incoming request to the cache.
-      if (cache_request) begin
-        if (cache_miss) begin
-          if (cache_write_enable) begin
-            // === Handle a cache miss write ===
-            if (!mem_request) begin
-              // Write the value to the cache.
-              cache_values[eviction_counter] <= cache_write_value;
-              cache_addresses[eviction_counter] <= cache_address;
-              eviction_counter <= eviction_counter + 1;
-              mem_request <= 1;
-              mem_address <= cache_address;
-              mem_write_value <= cache_write_value;
-              mem_write_enable <= 1;
-            end else begin
-              // Pass on a response, if relevant.
-              if (mem_request_complete) begin
-                cache_request_complete <= 1;
-              end
-            end
-          end else begin
-            // === Handle a cache miss read ===
-            if (!mem_request) begin
-              // Read the value from memory.
-              mem_request <= 1;
-              mem_address <= cache_address;
-              mem_write_enable <= 0;
-            end else begin
-              // Pass on a response, if relevant.
-              if (mem_request_complete) begin
-                cache_read_value <= mem_read_value;
-                cache_request_complete <= 1;
-              end
-            end
-          end
-        end else if (!cache_request_complete) begin
-          if (cache_write_enable) begin
-            // === Handle a cache hit write ===
-            cache_values[hit_cache_line] <= cache_write_value;
-            cache_addresses[hit_cache_line] <= cache_address;
-            cache_request_complete <= 1;
-          end else begin
-            // === Handle a cache hit read ===
-            cache_read_value <= cache_values[hit_cache_line];
-            cache_request_complete <= 1;
-          end
-        end
-      end else begin
-        // Otherwise, acknowledge the request.
-        cache_request_complete <= 0;
-      end
-    end
-  end
-endmodule
+//   always @(posedge clk) begin
+//     if (ena) begin
+//       // Check for an incoming request to the cache.
+//       if (cache_request) begin
+//         if (cache_miss) begin
+//           if (cache_write_enable) begin
+//             // === Handle a cache miss write ===
+//             if (!mem_request) begin
+//               // Write the value to the cache.
+//               cache_values[eviction_counter] <= cache_write_value;
+//               cache_addresses[eviction_counter] <= cache_address;
+//               eviction_counter <= eviction_counter + 1;
+//               mem_request <= 1;
+//               mem_address <= cache_address;
+//               mem_write_value <= cache_write_value;
+//               mem_write_enable <= 1;
+//             end else begin
+//               // Pass on a response, if relevant.
+//               if (mem_request_complete) begin
+//                 cache_request_complete <= 1;
+//               end
+//             end
+//           end else begin
+//             // === Handle a cache miss read ===
+//             if (!mem_request) begin
+//               // Read the value from memory.
+//               mem_request <= 1;
+//               mem_address <= cache_address;
+//               mem_write_enable <= 0;
+//             end else begin
+//               // Pass on a response, if relevant.
+//               if (mem_request_complete) begin
+//                 cache_read_value <= mem_read_value;
+//                 cache_request_complete <= 1;
+//               end
+//             end
+//           end
+//         end else if (!cache_request_complete) begin
+//           if (cache_write_enable) begin
+//             // === Handle a cache hit write ===
+//             cache_values[hit_cache_line] <= cache_write_value;
+//             cache_addresses[hit_cache_line] <= cache_address;
+//             cache_request_complete <= 1;
+//           end else begin
+//             // === Handle a cache hit read ===
+//             cache_read_value <= cache_values[hit_cache_line];
+//             cache_request_complete <= 1;
+//           end
+//         end
+//       end else begin
+//         // Otherwise, acknowledge the request.
+//         cache_request_complete <= 0;
+//       end
+//     end
+//   end
+// endmodule
 
 module font_rom(
   input wire [7:0] char,
@@ -341,6 +341,8 @@ module processor(
 
   output wire error_out, // high when an error has occurred
 
+  input wire [23:0] vga_counter,
+
   // Memory port.
   output reg [`SRAM_ADDRESS_SIZE - 1 : 0]  mem_address,
   output reg [`MEMORY_WORD_SIZE - 1 : 0]   mem_write_value,
@@ -363,6 +365,8 @@ module processor(
 
   assign error_out = error;
 
+  reg start_up_state = 1;
+
   // Aliases.
   wire [3:0] regA;
   assign regA = fetched_instruction[11:8];
@@ -383,13 +387,34 @@ module processor(
   wire [15:0] imm12SignExtended;
   assign imm12SignExtended = {{4{imm12[11]}}, imm12};
 
+  reg [31:0] lfsr = 1;
+
   always @(posedge clk) begin
     if (ena) begin
+      lfsr <= {lfsr[30:0], lfsr[31] ^ lfsr[21] ^ lfsr[1] ^ lfsr[0]};
+
       if (!rst_n) begin
         error <= 0;
         instruction_pointer <= 16'h1000;
         mem_request <= 0;
         ifetch_required <= 1;
+        start_up_state <= 1;
+        lfsr <= 1;
+      end else if (start_up_state) begin
+        // Begin by writing some instructions to the memory.
+        if ((!mem_request) && (vga_counter == 2799)) begin
+        // if (!mem_request) begin
+          mem_request <= 1;
+          //mem_address <= 16'h1000;
+          mem_address <= lfsr[6:0];
+          mem_write_value <= lfsr[15:0];
+          // Jump back to where we started.
+          //mem_write_value <= 16'b1111_1111_1110_0110;
+          mem_write_enable <= 1;
+        end else if (mem_request_complete) begin
+          mem_request <= 0;
+          //start_up_state <= 0;
+        end
       end else if (!error) begin
         // ========== Main logic begins here ==========
 
@@ -617,6 +642,7 @@ module micro1 (
 
   reg [`SRAM_ADDRESS_SIZE - 1 : 0] video_mem_address;
   reg [`MEMORY_WORD_SIZE - 1 : 0]  video_mem_write_value;
+  // wire [`MEMORY_WORD_SIZE - 1 : 0]  video_mem_write_value = 16'h0000;
   reg                              video_mem_write_enable;
   reg [`MEMORY_WORD_SIZE - 1 : 0]  video_mem_read_value;
   reg                              video_mem_request;
@@ -629,32 +655,39 @@ module micro1 (
   reg                              cpu_mem_request;
   reg                              cpu_mem_request_complete;
 
-  reg [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address;
-  reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value;
-  reg                              cache_mem_write_enable;
-  reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_read_value;
-  reg                              cache_mem_request;
-  reg                              cache_mem_request_complete;
+  // reg [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address;
+  // reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value;
+  // reg                              cache_mem_write_enable;
+  // reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_read_value;
+  // reg                              cache_mem_request;
+  // reg                              cache_mem_request_complete;
 
-  // Instantiate the cache.
-  cache cache_inst(
-    .ena(ena),
-    .clk(clk_100mhz),
+  // // Instantiate the cache.
+  // cache cache_inst(
+  //   .ena(ena),
+  //   .clk(clk_100mhz),
 
-    .mem_address(cpu_mem_address),
-    .mem_write_value(cpu_mem_write_value),
-    .mem_write_enable(cpu_mem_write_enable),
-    .mem_read_value(cpu_mem_read_value),
-    .mem_request(cpu_mem_request),
-    .mem_request_complete(cpu_mem_request_complete),
+  //   .mem_address(cpu_mem_address),
+  //   .mem_write_value(cpu_mem_write_value),
+  //   .mem_write_enable(cpu_mem_write_enable),
+  //   .mem_read_value(cpu_mem_read_value),
+  //   .mem_request(cpu_mem_request),
+  //   .mem_request_complete(cpu_mem_request_complete),
 
-    .cache_address(cache_mem_address),
-    .cache_write_value(cache_mem_write_value),
-    .cache_write_enable(cache_mem_write_enable),
-    .cache_read_value(cache_mem_read_value),
-    .cache_request(cache_mem_request),
-    .cache_request_complete(cache_mem_request_complete)
-  );
+  //   .cache_address(cache_mem_address),
+  //   .cache_write_value(cache_mem_write_value),
+  //   .cache_write_enable(cache_mem_write_enable),
+  //   .cache_read_value(cache_mem_read_value),
+  //   .cache_request(cache_mem_request),
+  //   .cache_request_complete(cache_mem_request_complete)
+  // );
+
+  // wire [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address = cpu_mem_address;
+  // wire [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value = cpu_mem_write_value;
+  // wire                              cache_mem_write_enable = cpu_mem_write_enable;
+  // wire [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_read_value = cpu_mem_read_value;
+  // wire                              cache_mem_request = cpu_mem_request;
+  // wire                              cache_mem_request_complete = cpu_mem_request_complete;
 
   wire error_out;
   assign led = !error_out;
@@ -672,13 +705,20 @@ module micro1 (
     .rst_n(rst_n),
 
     .error_out(error_out),
+    .vga_counter(ctr),
 
-    .mem_address(cache_mem_address),
-    .mem_write_value(cache_mem_write_value),
-    .mem_write_enable(cache_mem_write_enable),
-    .mem_read_value(cache_mem_read_value),
-    .mem_request(cache_mem_request),
-    .mem_request_complete(cache_mem_request_complete),
+    // .mem_address(cache_mem_address),
+    // .mem_write_value(cache_mem_write_value),
+    // .mem_write_enable(cache_mem_write_enable),
+    // .mem_read_value(cache_mem_read_value),
+    // .mem_request(cache_mem_request),
+    // .mem_request_complete(cache_mem_request_complete),
+    .mem_address(cpu_mem_address),
+    .mem_write_value(cpu_mem_write_value),
+    .mem_write_enable(cpu_mem_write_enable),
+    .mem_read_value(cpu_mem_read_value),
+    .mem_request(cpu_mem_request),
+    .mem_request_complete(cpu_mem_request_complete),
 
     .gpio_out(processor_gpio_out),
     .gpio_in(uio_in),
@@ -770,10 +810,10 @@ module micro1 (
   // assign vga_g = (lfsr[1] ^ lfsr[12]) & video_en;
   // assign vga_b = (lfsr[2] ^ lfsr[5]) & video_en;
   // assign vga_g = mem_request & video_en;
-  assign vga_g = 0 & video_en;
+  assign vga_g = cpu_mem_request_complete & video_en;
   //assign vga_b = (mem_request_complete | (pixel_x == 0) | (pixel_y == 0)) & video_en;
   // assign vga_b = ((pixel_x == 0) | (pixel_y == 0) & (current_col < 40)) & video_en;
-  assign vga_b = 0 & video_en;
+  assign vga_b = cpu_mem_request & video_en;
 
   assign vga_vs = scanline >= 2;
   assign vga_hs = (ctr < 2700) || (ctr > 3000);
@@ -807,7 +847,7 @@ module micro1 (
           video_mem_address <= 40 * line_ctr + 2 * line_ptr;
           // video_mem_write_enable <= lfsr[0] & lfsr[1] & lfsr[2] & lfsr[3] & lfsr[4]; // FIXME: Do a random mixture of reads and writes.
           // video_mem_write_value <= lfsr[15:0];
-          //video_mem_write_value <= video_mem_address;
+          // video_mem_write_value <= video_mem_address;
           // video_mem_write_value <= 8'hc5;
           video_mem_write_enable <= 0;
           video_mem_request <= 1;
