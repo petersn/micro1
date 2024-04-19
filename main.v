@@ -357,7 +357,7 @@ module processor(
 
   assign error_out = (error != 0);
 
-  reg start_up_state = 1;
+  // reg start_up_state = 1;
 
   // Aliases.
   wire [3:0] regA;
@@ -424,26 +424,26 @@ module processor(
         instruction_pointer <= 16'h1000;
         mem_request <= 0;
         ifetch_required <= 1;
-        start_up_state <= 1;
+        // start_up_state <= 1;
         lfsr <= 1;
-      end else if (start_up_state) begin
-        // Begin by writing some instructions to the memory.
-        if ((!mem_request) && (!mem_request_complete)) begin
-        // if (!mem_request) begin
-          mem_request <= 1;
-          mem_address <= 16'h1000;
-          //mem_address <= lfsr[6:0];
-          //mem_write_value <= lfsr[15:0];
-          // Jump back to where we started.
-          mem_write_value <= 16'b1111_1111_1110_0110;
-          // mem_write_value <= 0;
-          mem_write_enable <= 1;
-        end else if (mem_request_complete) begin
-          mem_request <= 0;
-          start_up_state <= 0;
-          ifetch_required <= 1;
-          // error <= 1;
-        end
+      // end else if (start_up_state) begin
+      //   // Begin by writing some instructions to the memory.
+      //   if ((!mem_request) && (!mem_request_complete)) begin
+      //   // if (!mem_request) begin
+      //     mem_request <= 1;
+      //     mem_address <= 16'h1000;
+      //     //mem_address <= lfsr[6:0];
+      //     //mem_write_value <= lfsr[15:0];
+      //     // Jump back to where we started.
+      //     // mem_write_value <= 16'b0000_0000_0000_1000;
+      //     // mem_write_value <= 0;
+      //     mem_write_enable <= 1;
+      //   end else if (mem_request_complete) begin
+      //     mem_request <= 0;
+      //     start_up_state <= 0;
+      //     ifetch_required <= 1;
+      //     // error <= 1;
+      //   end
       end else if (error != 0) begin
         // Write an error message to the screen.
         if ((!mem_request) && (!mem_request_complete) && (vga_counter == 0)) begin
@@ -464,7 +464,7 @@ module processor(
             mem_address <= instruction_pointer;
             mem_request <= 1;
             mem_write_enable <= 0;
-          end else begin
+          end else if (mem_request) begin
             mem_request <= 0;
             // $display("Fetched instruction @%h %b", instruction_pointer, mem_read_value);
             fetched_instruction <= mem_read_value;
