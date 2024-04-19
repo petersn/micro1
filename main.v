@@ -148,10 +148,7 @@ module cache (
     cache_addresses[24] == cache_address ? 24 : cache_addresses[25] == cache_address ? 25 : cache_addresses[26] == cache_address ? 26 : cache_addresses[27] == cache_address ? 27 :
     cache_addresses[28] == cache_address ? 28 : cache_addresses[29] == cache_address ? 29 : cache_addresses[30] == cache_address ? 30 : cache_addresses[31] == cache_address ? 31 : 32
   );
-  // The first 4096 bytes of memory are never cached.
-  // FIXME: This disables the cache!
-  // wire cache_miss = hit_cache_line[5] || (cache_address < 16'h1000);
-  wire cache_miss = 1;
+  wire cache_miss = hit_cache_line[5];
 
   reg [4:0] eviction_counter = 0;
 
@@ -161,6 +158,11 @@ module cache (
       if (cache_request) begin
         // All writes go through.
         if (cache_write_enable) begin
+          if (!cache_miss) begin
+            // We must update the cache entry.
+            cache_values[hit_cache_line] <= cache_write_value;
+          end
+
           if ((!mem_request) && (!mem_request_complete)) begin
             mem_request <= 1;
             mem_address <= cache_address;
