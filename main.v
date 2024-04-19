@@ -58,7 +58,7 @@ module memory_controller (
           end else if (counter < 32) begin
             // Then the next 17 bits are the address.
             sram_si <= mem_address[`SRAM_ADDRESS_SIZE - (counter - 8 - `SRAM_ADDRESS_IGNORED_BITS) - 1];
-            //sram_si <= mem_address[counter - 8 - `SRAM_ADDRESS_IGNORED_BITS];
+            // sram_si <= mem_address[counter - 8 - `SRAM_ADDRESS_IGNORED_BITS];
           end else if (counter < 32 + `MEMORY_WORD_SIZE) begin
             if (mem_write_enable) begin
               // Finally we send the bits to write, if relevant.
@@ -310,7 +310,7 @@ module font_rom(
     (off_char == 93) ? 256'b0000000000000000000000000000000000000000000110000000000000111000000000000110000000000000011000000000000001100000000000000110000000000001110000000000000111100000000000000110000000000000011000000000000001100000000000000110000000000000001110000000000000011000 :
     (off_char == 94) ? 256'b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011100000000000011111000000000011001100110000001100110011000000000001111000000000000011100 :
     (off_char == 95) ? 256'b0000000000000000000000000000000000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110000001111111111000000111111111100000011111111110 : 0;
-  assign color = ((char >= 32) && (char < 96)) ? turbo_block[pixel_addr] : pixel_x ^ pixel_y;
+  assign color = ((char >= 32) && (char < 128)) ? turbo_block[pixel_addr] : pixel_x ^ pixel_y;
   //assign color = ((char >= 32) && (char < 96)) ? font[char - 32][pixel_y * 16 + pixel_x] : pixel_x ^ pixel_y;
 endmodule
 
@@ -349,13 +349,13 @@ module processor(
   output reg [7:0] gpio_oe
 );
   // CPU state.
-  reg error;
+  reg [1:0] error;
   reg [`WORD_SIZE - 1 : 0] register_file[`REGISTER_COUNT];
   reg [`SRAM_ADDRESS_SIZE - 1 : 0] instruction_pointer;
   reg [`WORD_SIZE - 1 : 0] fetched_instruction;
   reg ifetch_required;
 
-  assign error_out = error;
+  assign error_out = (error != 0);
 
   reg start_up_state = 1;
 
@@ -380,6 +380,40 @@ module processor(
   assign imm12SignExtended = {{4{imm12[11]}}, imm12};
 
   reg [31:0] lfsr = 1;
+  reg [4:0] error_serialization_counter = 0;
+  wire [7:0] ip_char0 = (instruction_pointer[3:0] < 10) ? instruction_pointer[3:0] + 48 : instruction_pointer[3:0] + 55;
+  wire [7:0] ip_char1 = (instruction_pointer[7:4] < 10) ? instruction_pointer[7:4] + 48 : instruction_pointer[7:4] + 55;
+  wire [7:0] ip_char2 = (instruction_pointer[11:8] < 10) ? instruction_pointer[11:8] + 48 : instruction_pointer[11:8] + 55;
+  wire [7:0] ip_char3 = (instruction_pointer[15:12] < 10) ? instruction_pointer[15:12] + 48 : instruction_pointer[15:12] + 55;
+  wire [7:0] r0_char0 = (register_file[0][3:0] < 10) ? register_file[0][3:0] + 48 : register_file[0][3:0] + 55;
+  wire [7:0] r0_char1 = (register_file[0][7:4] < 10) ? register_file[0][7:4] + 48 : register_file[0][7:4] + 55;
+  wire [7:0] r0_char2 = (register_file[0][11:8] < 10) ? register_file[0][11:8] + 48 : register_file[0][11:8] + 55;
+  wire [7:0] r0_char3 = (register_file[0][15:12] < 10) ? register_file[0][15:12] + 48 : register_file[0][15:12] + 55;
+  wire [7:0] fi_char0 = (fetched_instruction[3:0] < 10) ? fetched_instruction[3:0] + 48 : fetched_instruction[3:0] + 55;
+  wire [7:0] fi_char1 = (fetched_instruction[7:4] < 10) ? fetched_instruction[7:4] + 48 : fetched_instruction[7:4] + 55;
+  wire [7:0] fi_char2 = (fetched_instruction[11:8] < 10) ? fetched_instruction[11:8] + 48 : fetched_instruction[11:8] + 55;
+  wire [7:0] fi_char3 = (fetched_instruction[15:12] < 10) ? fetched_instruction[15:12] + 48 : fetched_instruction[15:12] + 55;
+  wire [15:0] error_message =
+    (error_serialization_counter == 0) ? "rE" :
+    (error_serialization_counter == 1) ? ":r" :
+    (error_serialization_counter == 2) ? "C " :
+    (error_serialization_counter == 3) ? {4'h3, 2'b00, error, "="} :
+    (error_serialization_counter == 4) ? "I " :
+    (error_serialization_counter == 5) ? "=P" :
+    (error_serialization_counter == 6) ? "x0" :
+    (error_serialization_counter == 7) ? {ip_char2, ip_char3} :
+    (error_serialization_counter == 8) ? {ip_char0, ip_char1} :
+    (error_serialization_counter == 9) ? "R " :
+    (error_serialization_counter == 10) ? "=0" :
+    (error_serialization_counter == 11) ? "x0" :
+    (error_serialization_counter == 12) ? {r0_char2, r0_char3} :
+    (error_serialization_counter == 13) ? {r0_char0, r0_char1} :
+    (error_serialization_counter == 14) ? "F " :
+    (error_serialization_counter == 15) ? "=I" :
+    (error_serialization_counter == 16) ? "x0" :
+    (error_serialization_counter == 17) ? {fi_char2, fi_char3} :
+    (error_serialization_counter == 18) ? {fi_char0, fi_char1} :
+    (error_serialization_counter == 19) ? "  " : lfsr[15:0];
 
   always @(posedge clk) begin
     if (ena) begin
@@ -394,20 +428,34 @@ module processor(
         lfsr <= 1;
       end else if (start_up_state) begin
         // Begin by writing some instructions to the memory.
-        if ((!mem_request) && (!mem_request_complete) && (vga_counter == 0)) begin
+        if ((!mem_request) && (!mem_request_complete)) begin
         // if (!mem_request) begin
           mem_request <= 1;
-          //mem_address <= 16'h1000;
-          mem_address <= lfsr[6:0];
-          mem_write_value <= lfsr[15:0];
+          mem_address <= 16'h1000;
+          //mem_address <= lfsr[6:0];
+          //mem_write_value <= lfsr[15:0];
           // Jump back to where we started.
-          //mem_write_value <= 16'b1111_1111_1110_0110;
+          mem_write_value <= 16'b1111_1111_1110_0110;
+          // mem_write_value <= 0;
           mem_write_enable <= 1;
         end else if (mem_request_complete) begin
           mem_request <= 0;
-          //start_up_state <= 0;
+          start_up_state <= 0;
+          ifetch_required <= 1;
+          // error <= 1;
         end
-      end else if (!error) begin
+      end else if (error != 0) begin
+        // Write an error message to the screen.
+        if ((!mem_request) && (!mem_request_complete) && (vga_counter == 0)) begin
+          mem_request <= 1;
+          mem_address <= 1 + 2 * error_serialization_counter;
+          mem_write_value <= error_message;
+          mem_write_enable <= 1;
+          error_serialization_counter <= error_serialization_counter + 1;
+        end else if (mem_request_complete) begin
+          mem_request <= 0;
+        end
+      end else begin
         // ========== Main logic begins here ==========
 
         // If we don't have the instruction fetched, then fetch it.
@@ -416,13 +464,12 @@ module processor(
             mem_address <= instruction_pointer;
             mem_request <= 1;
             mem_write_enable <= 0;
-            if (mem_request_complete) begin
-              mem_request <= 0;
-              // $display("Fetched instruction @%h %b", instruction_pointer, mem_read_value);
-              fetched_instruction <= mem_read_value;
-              ifetch_required <= 0;
-              instruction_pointer <= instruction_pointer + 2;
-            end
+          end else begin
+            mem_request <= 0;
+            // $display("Fetched instruction @%h %b", instruction_pointer, mem_read_value);
+            fetched_instruction <= mem_read_value;
+            ifetch_required <= 0;
+            instruction_pointer <= instruction_pointer + 2;
           end
         end else begin
           case (fetched_instruction[3:0])
@@ -603,12 +650,16 @@ module processor(
                   // $display("GPIO OE r%d = r%d", regDest, regA);
                   register_file[regDest] <= gpio_oe[regA];
                 end
+                4'b0100: begin
+                  // $display("READ LFSR");
+                  register_file[regDest] <= lfsr[15:0];
+                end
               endcase
               ifetch_required <= 1;
             end
             default: begin
               // $display("BADOP");
-              error <= 1;
+              error <= 2;
             end
           endcase
         end
@@ -653,32 +704,32 @@ module micro1 (
   reg                              cpu_mem_request;
   reg                              cpu_mem_request_complete;
 
-  reg [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address;
-  reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value;
-  reg                              cache_mem_write_enable;
-  reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_read_value;
-  reg                              cache_mem_request;
-  reg                              cache_mem_request_complete;
+  // reg [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address;
+  // reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value;
+  // reg                              cache_mem_write_enable;
+  // reg [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_read_value;
+  // reg                              cache_mem_request;
+  // reg                              cache_mem_request_complete;
 
-  // Instantiate the cache.
-  cache cache_inst(
-    .ena(ena),
-    .clk(clk_100mhz),
+  // // Instantiate the cache.
+  // cache cache_inst(
+  //   .ena(ena),
+  //   .clk(clk_100mhz),
 
-    .mem_address(cpu_mem_address),
-    .mem_write_value(cpu_mem_write_value),
-    .mem_write_enable(cpu_mem_write_enable),
-    .mem_read_value(cpu_mem_read_value),
-    .mem_request(cpu_mem_request),
-    .mem_request_complete(cpu_mem_request_complete),
+  //   .mem_address(cpu_mem_address),
+  //   .mem_write_value(cpu_mem_write_value),
+  //   .mem_write_enable(cpu_mem_write_enable),
+  //   .mem_read_value(cpu_mem_read_value),
+  //   .mem_request(cpu_mem_request),
+  //   .mem_request_complete(cpu_mem_request_complete),
 
-    .cache_address(cache_mem_address),
-    .cache_write_value(cache_mem_write_value),
-    .cache_write_enable(cache_mem_write_enable),
-    .cache_read_value(cache_mem_read_value),
-    .cache_request(cache_mem_request),
-    .cache_request_complete(cache_mem_request_complete)
-  );
+  //   .cache_address(cache_mem_address),
+  //   .cache_write_value(cache_mem_write_value),
+  //   .cache_write_enable(cache_mem_write_enable),
+  //   .cache_read_value(cache_mem_read_value),
+  //   .cache_request(cache_mem_request),
+  //   .cache_request_complete(cache_mem_request_complete)
+  // );
 
   // wire [`SRAM_ADDRESS_SIZE - 1 : 0] cache_mem_address = cpu_mem_address;
   // wire [`MEMORY_WORD_SIZE - 1 : 0]  cache_mem_write_value = cpu_mem_write_value;
@@ -705,18 +756,18 @@ module micro1 (
     .error_out(error_out),
     .vga_counter(ctr),
 
-    .mem_address(cache_mem_address),
-    .mem_write_value(cache_mem_write_value),
-    .mem_write_enable(cache_mem_write_enable),
-    .mem_read_value(cache_mem_read_value),
-    .mem_request(cache_mem_request),
-    .mem_request_complete(cache_mem_request_complete),
-    // .mem_address(cpu_mem_address),
-    // .mem_write_value(cpu_mem_write_value),
-    // .mem_write_enable(cpu_mem_write_enable),
-    // .mem_read_value(cpu_mem_read_value),
-    // .mem_request(cpu_mem_request),
-    // .mem_request_complete(cpu_mem_request_complete),
+    // .mem_address(cache_mem_address),
+    // .mem_write_value(cache_mem_write_value),
+    // .mem_write_enable(cache_mem_write_enable),
+    // .mem_read_value(cache_mem_read_value),
+    // .mem_request(cache_mem_request),
+    // .mem_request_complete(cache_mem_request_complete),
+    .mem_address(cpu_mem_address),
+    .mem_write_value(cpu_mem_write_value),
+    .mem_write_enable(cpu_mem_write_enable),
+    .mem_read_value(cpu_mem_read_value),
+    .mem_request(cpu_mem_request),
+    .mem_request_complete(cpu_mem_request_complete),
 
     .gpio_out(processor_gpio_out),
     .gpio_in(uio_in),
@@ -789,7 +840,7 @@ module micro1 (
   wire [3:0] pixel_x = ctr[5:2];
 
   wire [15:0] current_char_pair = current_col >= 40 ? 0 : (line_flip ? line_buffer2[current_col >> 1] : line_buffer1[current_col >> 1]);
-  wire [7:0] current_char = current_col[0] ? current_char_pair[7:0] : current_char_pair[15:8];
+  wire [7:0] current_char = current_col[0] ? current_char_pair[15:8] : current_char_pair[7:0];
 
   wire color;
   font_rom font_rom_inst(
@@ -808,10 +859,10 @@ module micro1 (
   // assign vga_g = (lfsr[1] ^ lfsr[12]) & video_en;
   // assign vga_b = (lfsr[2] ^ lfsr[5]) & video_en;
   // assign vga_g = mem_request & video_en;
-  assign vga_g = cache_mem_request & video_en;
+  assign vga_g = 0 & video_en;
   //assign vga_b = (mem_request_complete | (pixel_x == 0) | (pixel_y == 0)) & video_en;
   // assign vga_b = ((pixel_x == 0) | (pixel_y == 0) & (current_col < 40)) & video_en;
-  assign vga_b = cpu_mem_request & video_en;
+  assign vga_b = 0 & video_en;
 
   assign vga_vs = scanline >= 2;
   assign vga_hs = (ctr < 2700) || (ctr > 3000);
